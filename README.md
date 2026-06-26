@@ -210,14 +210,6 @@ embedding-translation/
 └── pyproject.toml
 ```
 
-**Conventions** (enforced):
-- **Config is pydantic v2 only.** Every knob is a validated `BaseModel` field;
-  every env-driven setting goes through `pydantic-settings`.
-- **Datasets & embeddings delegate to `vectorbench`** — never re-implement BEIR/MTEB
-  loaders or the 14 embedding generators. (Never import `vectorbench.embedding_dataset`.)
-- **One mapper, one folder.** A new strategy is a new sibling under `mapper/`,
-  registered in `mapper/__init__.py` — not edits sprinkled across shared files.
-
 ---
 
 ## 📄 Citation
