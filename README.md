@@ -58,14 +58,6 @@ expensive; **embedding translation** instead learns a lightweight map
 `f_{A→B} : ℝ^{d_A} → ℝ^{d_B}` from a paired training set so that
 `f(emb_A(o)) ≈ emb_B(o)`, then applies it to a held-out corpus.
 
-This repository is the single source of truth that unifies and supersedes two
-predecessor codebases:
-
-- **VectorMerge** — foundation library (procrustes, CCA, nonlinear, GW, LA2M
-  mappers; reference-set construction; BEIR-style evaluation).
-- **VectorTranslation** — research layer (linear / simple-linear / hierarchical-MoE
-  mappers, specialised losses, ZenML pipelines).
-
 It is the reference implementation for the ICML 2026 paper
 *"Generalizable and Composable Multi-Model Embedding Translation"*
 (Beining Yang, Yang Cao).
