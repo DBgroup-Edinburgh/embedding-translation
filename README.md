@@ -23,6 +23,13 @@ re-embedding the corpus.*
 
 ---
 
+## 🎉 News
+
+- **2026.04** — H-MoE was selected as an **ICML 2026 Spotlight** 🎉
+- **2026.04** — LA2M received the **SIGMOD 2026 Best Paper Honorable Mention** 🎉
+
+---
+
 ## 🔥 Highlights
 
 - **One mapper, eight strategies.** Procrustes, CCA, linear / simple-linear MLPs,
