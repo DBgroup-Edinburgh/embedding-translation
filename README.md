@@ -240,7 +240,8 @@ embedding-translation/
   volume    = {3},
   number    = {6},
   pages     = {1--28},
-  year      = {2025}
+  year      = {2025},
+  note      = {Presented at SIGMOD 2026}
 }
 ```
 
