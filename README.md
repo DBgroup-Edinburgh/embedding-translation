@@ -33,7 +33,7 @@ re-embedding the corpus.*
 ## 🔥 Highlights
 
 - **One mapper, eight strategies.** Procrustes, CCA, linear / simple-linear MLPs,
-  nonlinear, Gromov–Wasserstein, LA2M, and the headline **hierarchical
+  nonlinear, Gromov–Wasserstein, **LA2M**, and the headline **hierarchical
   Mixture-of-Experts (H-MoE)** translator — each in its own folder, selected by config.
 - **H-MoE with LoRA experts.** A shared SELU backbone plus per-node low-rank
   adapters over an agglomerative-style tree, with cascade routing. Localized
