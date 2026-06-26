@@ -10,7 +10,6 @@ re-embedding the corpus.*
 
 [Quick Start](#-quick-start) ·
 [Core Concepts](#-core-concepts) ·
-[Reproduction](#-reproducing-the-paper) ·
 [Repository Layout](#️-repository-layout) ·
 [Citation](#-citation)
 
@@ -176,14 +175,6 @@ with `L_reg + α·L_local + β·L_dir` (`α = 0.5`, `β = 0.7`).
 
 Pre-translation **Translation Confidence** (`TC(x) = exp(−δ(x)/σ)`) gives a
 per-input reliability signal — see the [Quick Start](#translation-confidence) for usage.
-
----
-
-## 📊 Reproducing the paper
-
-The per-experiment reproduction scripts are released separately from this core
-library. Embeddings are loaded memmap-backed, so large-corpus translation and
-evaluation stay incremental and resumable.
 
 ---
 
