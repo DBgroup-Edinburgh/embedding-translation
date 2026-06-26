@@ -216,3 +216,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Source papers being reproduced
+paper/
+
+# --- merged from embedding-translation source repo ---
+# Generated outputs (smoke runs, training results, embeddings, etc.)
+output/
+*.npy
+*.npz
+# DVC working files
+.dvc/cache/
+.dvc/tmp/
+# Claude Code local agent state / private instructions — never commit
+.claude/
+CLAUDE.md
