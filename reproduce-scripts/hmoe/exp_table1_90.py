@@ -15,10 +15,7 @@ Embeddings are the precomputed VectorBenchmark vectors (HF dataset
 DB-Edinburgh/VectorBenchmark); set VB_DIR to where they are stored
 (see reproduce-scripts/README.md).
 
-Methods: hmoe (H-MoE, K=8 on Fever, r=8, cos base loss + global-retrieval
-objective retr=6, L_dir off), procrustes (PA baseline). Resumable: results are keyed by
-f"{src}->{tgt}@{dataset}"; already-scored cells are skipped. NaN rows are filtered
-and embeddings are L2-normalized on load (paper Appendix B.1).
+Methods: hmoe (H-MoE, K=8 on Fever, r=8). 
 
 Run (resumable; one method per invocation):
     METHOD=hmoe VB_DIR=... OMP_NUM_THREADS=16 OPENBLAS_NUM_THREADS=16 MKL_NUM_THREADS=16 \

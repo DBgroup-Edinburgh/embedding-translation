@@ -15,9 +15,8 @@ re-embedding the corpus.*
 [Citation](#-citation)
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![Config](https://img.shields.io/badge/config-pydantic%20v2-e92063)
 ![Venue](https://img.shields.io/badge/ICML-2026-8a2be2)
-![Status](https://img.shields.io/badge/status-research-orange)
+![Venue](https://img.shields.io/badge/SIGMOD-2026-yellow)
 
 </div>
 
@@ -156,10 +155,10 @@ JSON under `output/repro/` and the matrix / Table-1 scripts are **resumable**.
 
 | script | what it does | paper ref |
 |---|---|---|
-| `hmoe/exp_table1_90.py` | 90 directed pairs (10 models × 9 targets), FiQA→SciFact OOD; `METHOD=procrustes\|hmoe_retr` | Table 1 (pairwise OOD) |
+| `hmoe/exp_table1_90.py` | 90 directed pairs (10 models × 9 targets), Fever→{ciDocs, ArguAna, FiQA-2018};  | Table 1 (pairwise OOD) |
 | `hmoe/exp_mixing.py` | multi-model mixing (sources → shared target); absolute `mixed` R@100 **and** drop | §5.4 / Fig 9a |
-| `hmoe/exp_chaining.py` | two-hop `src→hub→tgt` vs direct, seed-averaged | §5.4 / Fig 9b |
-| `la2m/exp_la2m.py` | one (src,tgt,dataset) cell: Union / A2M / LA2M over an n-cluster sweep; `--centers 1,0` toggles the mean-centring ablation | Table 4 (+ Fig 5) |
+| `hmoe/exp_chaining.py` | two-hop `src→hub→tgt` vs direct| §5.4 / Fig 9b |
+| `la2m/exp_la2m.py` | one (src,tgt,dataset) cell: Union / A2M / LA2M over an n-cluster sweep; toggles the mean-centring ablation | Table 4 (+ Fig 5) |
 | `la2m/exp_la2m_matrix.py` | 16-cell generality scan across 4 datasets, LA2M best-n R1 vs native ceiling | LA2M generality |
 
 ### Running

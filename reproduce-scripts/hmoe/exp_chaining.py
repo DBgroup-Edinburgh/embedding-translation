@@ -5,8 +5,7 @@ translators f1 = SRC->HUB and f2 = HUB->TGT on FiQA, plus a direct SRC->TGT
 reference; evaluate OOD on SciFact. The upstream hop uses the u1 channel and the
 downstream hop the u2 channel (u2 _|_ u1).
 
-drop = direct Recall@100 - chained Recall@100. The H-MoE translators use our
-config: cos base loss + global-retrieval objective (retr_weight=6), L_dir off.
+drop = direct Recall@100 - chained Recall@100. The H-MoE translators use our config.
 
 Run:
     PYTHONPATH=src:.  python reproduce-scripts/hmoe/exp_chaining.py --out output/repro/chaining.json

@@ -5,8 +5,7 @@ translators are trained on FiQA and applied OOD on SciFact. The mixed corpus is
 assembled 3-way (1/3 native nemotron, 1/3 from f_{kalm->nemotron}, 1/3 from
 f_{openai->nemotron}) and searched with native nemotron queries.
 
-drop = avg-pairwise Recall@100 - mixed Recall@100. The H-MoE translators use our
-config: cos base loss + global-retrieval objective (retr_weight=6), L_dir off (beta=0).
+drop = avg-pairwise Recall@100 - mixed Recall@100. The H-MoE translators use our config
 
 Run:
     PYTHONPATH=src:.  python reproduce-scripts/hmoe/exp_mixing.py --out output/repro/mixing.json
