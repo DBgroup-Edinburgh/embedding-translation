@@ -231,3 +231,5 @@ output/
 # Claude Code local agent state / private instructions — never commit
 .claude/
 CLAUDE.md
+# Internal reproduction analysis / working notes — never publish
+docs/superpowers/

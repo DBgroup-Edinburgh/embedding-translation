@@ -9,6 +9,7 @@ model can be searched, mixed, and chained in another model's space — without
 re-embedding the corpus.*
 
 [Quick Start](#-quick-start) ·
+[Reproduction](#-examples--reproduction) ·
 [Core Concepts](#-core-concepts) ·
 [Repository Layout](#️-repository-layout) ·
 [Citation](#-citation)
@@ -90,7 +91,7 @@ from embedding_translation.mapper.hmoe import HMoEMapper
 src = get_embedding(EmbeddingRequest(dataset_name="fiqa", model_name="kalm",     type_="corpus"))
 tgt = get_embedding(EmbeddingRequest(dataset_name="fiqa", model_name="nemotron", type_="corpus"))
 
-# 2. Configure an H-MoE translator with the paper-canonical knobs
+# 2. Configure an H-MoE translator with the canonical knobs
 cfg = MappingConfig(hmoe_config=GatingMoEConfig(
     moe_type="hierarchical_lora",
     num_levels=3, branch_factor=2,          # K = 4 leaves (use 8 on Fever)
@@ -136,12 +137,62 @@ etrans list-mappers    # available mapping strategies
 
 ---
 
-## 📖 Examples
+## 📖 Examples & Reproduction
 
-This release ships the core `embedding_translation` library — see the
-[Quick Start](#-quick-start) above for the end-to-end translate-and-evaluate flow
-against any model pair. The paper-reproduction scripts (one per experiment) are
-released separately.
+See the [Quick Start](#-quick-start) above for the end-to-end
+translate-and-evaluate flow against any model pair. Self-contained scripts that
+reproduce both papers backed by this repo live under
+[`reproduce-scripts/`](reproduce-scripts/) (full details in its
+[README](reproduce-scripts/README.md)):
+
+| folder | paper | task |
+|---|---|---|
+| [`hmoe/`](reproduce-scripts/hmoe) | *Generalizable and Composable Multi-Model Embedding Translation* (ICML'26) | embedding translation — pairwise OOD, mixing, chaining |
+| [`la2m/`](reproduce-scripts/la2m) | *Integrating Vector Databases across Embedding Models* (SIGMOD'26) | LA2M cross-model vector-database integration |
+
+`harness.py` is shared by both (cached-embedding loading, BEIR metadata, cosine
+Recall@k, the H-MoE train/eval closures); each script writes raw metrics to a
+JSON under `output/repro/` and the matrix / Table-1 scripts are **resumable**.
+
+| script | what it does | paper ref |
+|---|---|---|
+| `hmoe/exp_table1_90.py` | 90 directed pairs (10 models × 9 targets), FiQA→SciFact OOD; `METHOD=procrustes\|hmoe_retr` | Table 1 (pairwise OOD) |
+| `hmoe/exp_mixing.py` | multi-model mixing (sources → shared target); absolute `mixed` R@100 **and** drop | §5.4 / Fig 9a |
+| `hmoe/exp_chaining.py` | two-hop `src→hub→tgt` vs direct, seed-averaged | §5.4 / Fig 9b |
+| `la2m/exp_la2m.py` | one (src,tgt,dataset) cell: Union / A2M / LA2M over an n-cluster sweep; `--centers 1,0` toggles the mean-centring ablation | Table 4 (+ Fig 5) |
+| `la2m/exp_la2m_matrix.py` | 16-cell generality scan across 4 datasets, LA2M best-n R1 vs native ceiling | LA2M generality |
+
+### Running
+
+The scripts operate on **pre-computed embedding arrays** (not raw text), one
+2-D `.npy` per model/dataset named `{kind}_{model}_{dataset}.npy` (`kind ∈
+{corpus, query}`), with row `i` in BEIR's native id order. Generate them with
+any embedding model (e.g. the `vectorbench` factory) and drop them in `VB_DIR`;
+arrays are L2-normalized on load. A `src → tgt` cell needs `corpus_{src}`,
+`corpus_{tgt}`, and `query_{tgt}` (the query side is always the **target**
+model). The H-MoE scripts additionally need `torch` + this repo's
+`embedding_translation`; the LA2M scripts are pure numpy / sklearn / faiss.
+
+```bash
+# point at the embedding cache + a BEIR working dir, and cap BLAS threads
+# (the Procrustes / k-means SVDs oversubscribe CPU otherwise — ~20× slower)
+export VB_DIR=/path/to/embeddings BEIR_DIR=/path/to/beir_work
+export OMP_NUM_THREADS=16 OPENBLAS_NUM_THREADS=16 MKL_NUM_THREADS=16
+
+# H-MoE — pairwise OOD (one method per resumable run), mixing, chaining
+METHOD=hmoe_retr python reproduce-scripts/hmoe/exp_table1_90.py
+python reproduce-scripts/hmoe/exp_mixing.py   --out output/repro/mixing.json
+python reproduce-scripts/hmoe/exp_chaining.py --out output/repro/chaining.json
+
+# LA2M — single cell + n-sweep (paper Table 4 proxy), and the 16-cell matrix
+python reproduce-scripts/la2m/exp_la2m.py \
+  --src mistral --tgt openai --dataset scifact --n-clusters 1,4,8,16,32 --seeds 3
+python reproduce-scripts/la2m/exp_la2m_matrix.py
+```
+
+More exploratory / diagnostic runners (Procrustes-residual mixing variants,
+ensembles, per-target diagnostics) remain under `scripts/repro/` and are not
+part of this curated set.
 
 ---
 

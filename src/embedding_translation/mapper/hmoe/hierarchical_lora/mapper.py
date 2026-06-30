@@ -72,20 +72,24 @@ class HierarchicalLoRAMoEMapper(BaseMoEMapper):
         tau: float = 0.8,                   # routing ambiguity threshold
         local_nn_m: int = 100,              # NN count for L_local
         base_loss: str = "l1",              # Stage-1 base translator loss
+        train_internal_experts: bool = True,  # train an expert at all 2K-1 nodes
+                                            # (internal + leaf) so tau-cascade
+                                            # backoff routes to a trained expert.
         u1: Optional[np.ndarray] = None,    # external PCA-1 direction of TARGET (mixing channel)
         u2: Optional[np.ndarray] = None,    # external PCA-2 direction of TARGET (chaining channel)
         # Which channel the L_dir penalty uses. "u1" (default, mixing channel)
         # vs "u2" (chaining channel for the second-hop translator in s→h→t).
         dir_channel: str = "u1",
-        # L_dir normalization: "fraction" (legacy, gameable) vs "fixed" (raw
-        # off-axis energy / precomputed target-variance scale).
-        dir_norm: str = "fraction",
+        # L_dir normalization: "fixed" (raw off-axis energy / precomputed
+        # target-variance scale, β monotone) vs "fraction" (‖orth‖²/‖e‖²).
+        dir_norm: str = "fixed",
         # L_local anchor subsampling (0 = all rows, paper-faithful).
         local_anchors: int = 0,
         # H-MoE-specific mixing-aware retr (global native negatives); 0 disables.
         retr_weight: float = 0.0,
         retr_tau: float = 0.05,
         retr_pool_size: int = 2048,
+        retr_hard_k: int = 0,
         **kwargs
     ):
         super().__init__()
@@ -123,6 +127,7 @@ class HierarchicalLoRAMoEMapper(BaseMoEMapper):
         # anchors cuts it ~linearly while preserving m (the neighbor count).
         self.local_anchors = int(local_anchors)
         self.base_loss = str(base_loss)
+        self.train_internal_experts = bool(train_internal_experts)
         # PCA directions (R^{d_target}); set externally or auto-computed in Stage 2.5
         self._u1: Optional[torch.Tensor] = None if u1 is None else torch.from_numpy(np.asarray(u1, dtype=np.float32))
         self._u2: Optional[torch.Tensor] = None if u2 is None else torch.from_numpy(np.asarray(u2, dtype=np.float32))
@@ -142,6 +147,7 @@ class HierarchicalLoRAMoEMapper(BaseMoEMapper):
         self.retr_weight = float(retr_weight)
         self.retr_tau = float(retr_tau)
         self.retr_pool_size = int(retr_pool_size)
+        self.retr_hard_k = int(retr_hard_k)
         self._global_neg_pool: Optional[torch.Tensor] = None
         
         # Tree structure
@@ -584,9 +590,19 @@ class HierarchicalLoRAMoEMapper(BaseMoEMapper):
             min_samples: Minimum samples required to train an adapter
         """
         leaf_level = self.num_levels - 1
-        leaf_nodes = self.tree.get_nodes_at_level(leaf_level)
-        
-        logger.info(f"Training LoRA adapters for {len(leaf_nodes)} leaf nodes...")
+        if self.train_internal_experts:
+            # All 2K-1 nodes (internal + leaf); each internal node trains on the
+            # union of its descendant leaves so tau-cascade backoff has a real
+            # expert at every node it can stop on (paper Algorithm 1 / line 364).
+            leaf_nodes = [
+                n for n in self.tree.nodes
+                if n.data_indices is not None and len(n.data_indices) >= min_samples
+            ]
+        else:
+            leaf_nodes = self.tree.get_nodes_at_level(leaf_level)
+
+        logger.info(f"Training LoRA adapters for {len(leaf_nodes)} nodes "
+                    f"(internal+leaf={self.train_internal_experts})...")
         logger.info(f"  LoRA config: rank={self.lora_config.rank}, "
                    f"alpha={self.lora_config.alpha}, dropout={self.lora_config.dropout}")
         logger.info(f"  Epochs per adapter: {self.lora_epochs}")
@@ -793,12 +809,9 @@ class HierarchicalLoRAMoEMapper(BaseMoEMapper):
           chaining s → Hub → t so its residual decouples from the upstream
           channel.
 
-        We return the *fraction* of residual energy off-axis (scale-invariant)
-        instead of the absolute orthogonal energy: ||orth||² / ||e||². This
-        keeps β interpretable across batches and across translators with
-        different residual scales. The unnormalized form was being dwarfed by
-        the regression loss in our setup; the diagnostic confirmed residuals
-        were barely concentrating along the trained direction.
+        Normalization is controlled by ``dir_norm`` (see ``_off_axis_penalty``):
+        the default "fixed" form divides the raw off-axis energy by a precomputed
+        target-variance scale, keeping β interpretable across batches/translators.
         """
         u = self._u1 if self.dir_channel == "u1" else self._u2
         if u is None:
@@ -809,14 +822,13 @@ class HierarchicalLoRAMoEMapper(BaseMoEMapper):
     def _off_axis_penalty(self, e: torch.Tensor, u: torch.Tensor) -> torch.Tensor:
         """Penalty on residual energy orthogonal to direction ``u``.
 
+        - dir_norm="fixed" (default): ``‖orth‖²/σ²`` with σ² a precomputed
+          constant (mean target variance). Penalizes the raw off-axis energy
+          directly — the paper's L_dir form at a fixed scale, monotone in the
+          off-axis component and interpretable across batches/translators.
         - dir_norm="fraction": ``‖orth‖²/‖e‖²`` per sample, in [0,1]. Scale-free
-          but GAMEABLE — the optimizer can lower the ratio by inflating the
-          on-axis component, which grows the total residual ‖e‖² and degrades
-          reconstruction. This is why raising β perversely *hurt* mixing/chaining.
-        - dir_norm="fixed": ``‖orth‖²/σ²`` with σ² a precomputed constant
-          (mean target variance). Penalizes the raw off-axis energy directly, so
-          it cannot be gamed by growing the on-axis part — the paper's L_dir form
-          with a fixed scale that keeps β interpretable across batches/translators.
+          but lowerable by inflating the on-axis component rather than reducing
+          the off-axis energy.
         """
         e_sq = e.pow(2).sum(dim=1)                                           # (B,)
         proj_sq = (e @ u).pow(2)                                             # (B,)
@@ -839,9 +851,25 @@ class HierarchicalLoRAMoEMapper(BaseMoEMapper):
         o = nn.functional.normalize(outputs, p=2, dim=1)
         a = nn.functional.normalize(tgt_batch, p=2, dim=1)
         B = o.shape[0]
+        idx = torch.arange(B, device=o.device)
+        if self.retr_hard_k > 0:
+            # Hard-negative mining: per anchor, keep only the top-k native pool
+            # docs it is most confusable with (excluding its own near-dup). These
+            # are the docs most likely to crowd out true natives in the merged
+            # corpus — concentrate the contrastive there instead of on a uniform
+            # pool (which over-regularizes, as the pool-size sweep showed).
+            k = min(self.retr_hard_k, pool.shape[0])
+            with torch.no_grad():
+                sims = a @ pool.t()                              # (B, P)
+                sims = sims.masked_fill(sims > 0.999, float("-inf"))
+                topk = sims.topk(k, dim=1).indices               # (B, k)
+            neg = pool[topk]                                     # (B, k, d)
+            o_logits = (a @ o.t()) / self.retr_tau              # (B, B), positive on diag
+            neg_logits = torch.einsum("bd,bkd->bk", a, neg) / self.retr_tau   # (B, k)
+            logits = torch.cat([o_logits, neg_logits], dim=1)   # (B, B+k)
+            return nn.functional.cross_entropy(logits, idx)
         cand = torch.cat([o, pool], dim=0)                       # (B+P, d)
         logits = (a @ cand.t()) / self.retr_tau                  # (B, B+P)
-        idx = torch.arange(B, device=o.device)
         # mask pool columns that are the anchor's own (near-dup) native doc
         with torch.no_grad():
             dup = (a @ pool.t()) > 0.999                         # (B, P)
@@ -1027,6 +1055,37 @@ class HierarchicalLoRAMoEMapper(BaseMoEMapper):
         else:
             raise ValueError(f"Unsupported distance metric: {self.distance_metric}")
     
+    def _route_single(self, embedding: np.ndarray) -> int:
+        """Route one embedding via paper Algorithm 2 (tau-cascade routing).
+
+        Descend from the root, but at each level stop early when the child
+        decision is ambiguous: with d the distances to the children, let
+        rho = d_min / d_next (the two nearest children). If rho > tau the
+        boundary is ambiguous, so we stop at the current (coarser) node and
+        return its id; otherwise we descend to the nearest child. tau=1.0
+        disables the backoff (always reaches a leaf), recovering the plain
+        nearest-centroid cascade.
+        """
+        if self.tree is None:
+            raise ValueError("Tree not built. Call fit() first.")
+        node_id = self.tree.root_id
+        x = embedding.reshape(1, -1)
+        while True:
+            node = self.tree.nodes[node_id]
+            if len(node.child_ids) == 0:
+                return node_id
+            cents = np.stack(
+                [self.tree.nodes[c].centroid for c in node.child_ids], axis=0
+            )
+            d = self._compute_distances(x, cents)[0]
+            order = np.argsort(d)
+            d_min = float(d[order[0]])
+            d_next = float(d[order[1]]) if len(d) > 1 else d_min
+            rho = (d_min / d_next) if d_next > 0 else 0.0
+            if d_next > 0 and rho > self.tau:
+                return node_id
+            node_id = node.child_ids[int(order[0])]
+
     def _route_single_to_leaf(self, embedding: np.ndarray) -> int:
         """
         Route a single embedding through the hierarchy tree to a leaf node.
@@ -1090,9 +1149,9 @@ class HierarchicalLoRAMoEMapper(BaseMoEMapper):
         n_samples = embeddings.shape[0]
         expert_ids = np.empty(n_samples, dtype=np.int32)
         
-        # Route each embedding through the tree
+        # Route each embedding through the tree (tau-cascade, paper Algorithm 2)
         for i in range(n_samples):
-            expert_ids[i] = self._route_single_to_leaf(embeddings[i])
+            expert_ids[i] = self._route_single(embeddings[i])
         
         return expert_ids
     

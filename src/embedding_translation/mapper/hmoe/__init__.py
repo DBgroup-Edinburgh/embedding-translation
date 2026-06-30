@@ -105,12 +105,14 @@ class HMoEMapper(MappingStrategy):
                 tau=cfg.tau,
                 local_nn_m=cfg.local_nn_m,
                 base_loss=cfg.base_loss,
+                train_internal_experts=cfg.train_internal_experts,
                 dir_channel=dir_channel,
                 dir_norm=cfg.dir_norm,
                 local_anchors=cfg.local_anchors,
                 retr_weight=cfg.retr_weight,
                 retr_tau=cfg.retr_tau,
                 retr_pool_size=cfg.retr_pool_size,
+                retr_hard_k=cfg.retr_hard_k,
             )
         else:
             raise ValueError(f"Unknown moe_type {cfg.moe_type!r}")

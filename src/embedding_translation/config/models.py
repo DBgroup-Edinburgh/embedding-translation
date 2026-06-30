@@ -207,6 +207,11 @@ class GatingMoEConfig(BaseModel):
     # Hierarchical (defaults give K=4 leaves; for Fever use num_levels=4, branch_factor=2 → K=8)
     num_levels: int = Field(3, ge=2)      # 3 levels with branch_factor=2 → 4 leaves
     branch_factor: int = Field(2, ge=2)
+    # Train an expert at every one of the 2K-1 tree nodes (internal + leaf), so
+    # the tau-cascade router has a trained expert to fall back to at coarser
+    # nodes (paper: "internal-node expert is trained on the union of its
+    # descendant leaves"). False = leaf-only experts (coarser routes hit base).
+    train_internal_experts: bool = True
 
     # LoRA
     lora_rank: int = Field(8, ge=1)
@@ -227,10 +232,10 @@ class GatingMoEConfig(BaseModel):
     tau: float = Field(0.8, ge=0, le=1)   # routing ambiguity threshold
     local_nn_m: int = Field(100, ge=1)    # NN count for L_local
     base_loss: Literal["l1", "mse", "cos", "mse_cos", "cos_retr"] = "l1"  # Stage-1 base translator
-    # L_dir normalization. "fraction" = ‖orth‖²/‖e‖² per sample (scale-invariant).
-    # "fixed" = ‖orth‖²/σ² with σ² a precomputed constant (target variance), i.e.
-    # the paper's raw off-axis energy under a fixed scale.
-    dir_norm: Literal["fraction", "fixed"] = "fraction"
+    # L_dir normalization. "fixed" (default) = ‖orth‖²/σ² with σ² a precomputed
+    # constant (target variance) — the paper's raw off-axis energy at a fixed
+    # scale, so β behaves monotonically. "fraction" = ‖orth‖²/‖e‖² per sample.
+    dir_norm: Literal["fraction", "fixed"] = "fixed"
     # L_local anchor subsampling per batch (0 = all rows, paper-faithful).
     local_anchors: int = Field(0, ge=0)
     # H-MoE-specific mixing-aware retr loss: each LoRA expert's InfoNCE uses a
@@ -239,6 +244,11 @@ class GatingMoEConfig(BaseModel):
     retr_weight: float = Field(0.0, ge=0)
     retr_tau: float = Field(0.05, gt=0)
     retr_pool_size: int = Field(2048, ge=1)
+    # Hard-negative mining for the global-retr loss: when > 0, each batch uses the
+    # top-`retr_hard_k` native pool docs most similar to its anchors (the truly
+    # confusable docs) as negatives, instead of the full uniform pool. The pool
+    # (size `retr_pool_size`) becomes the candidate set to mine from. 0 = uniform.
+    retr_hard_k: int = Field(0, ge=0)
 
     # Expert mapper hyperparams (shared SimpleLinearModel-like architecture)
     mapper_config: SimpleLinearMapperConfig = Field(default_factory=SimpleLinearMapperConfig)
